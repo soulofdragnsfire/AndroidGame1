@@ -3,6 +3,7 @@ package com.chierin.game;
 import static org.andengine.extension.physics.box2d.util.constants.PhysicsConstants.PIXEL_TO_METER_RATIO_DEFAULT;
 
 import java.util.LinkedList;
+import java.util.ListIterator;
 
 import org.andengine.engine.camera.Camera;
 import org.andengine.engine.options.EngineOptions;
@@ -13,8 +14,11 @@ import org.andengine.entity.scene.Scene;
 import org.andengine.entity.scene.Scene.IOnSceneTouchListener;
 import org.andengine.entity.scene.background.Background;
 import org.andengine.entity.util.FPSLogger;
+import org.andengine.extension.physics.box2d.FixedStepPhysicsWorld;
 import org.andengine.extension.physics.box2d.PhysicsFactory;
 import org.andengine.extension.physics.box2d.PhysicsWorld;
+import org.andengine.extension.physics.box2d.util.Vector2Pool;
+import org.andengine.extension.physics.box2d.util.constants.PhysicsConstants;
 import org.andengine.input.touch.TouchEvent;
 import org.andengine.opengl.texture.TextureOptions;
 import org.andengine.opengl.texture.atlas.bitmap.BitmapTextureAtlas;
@@ -26,7 +30,12 @@ import android.widget.Toast;
 
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.BodyDef.BodyType;
+import com.badlogic.gdx.physics.box2d.Contact;
+import com.badlogic.gdx.physics.box2d.ContactImpulse;
+import com.badlogic.gdx.physics.box2d.ContactListener;
+import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.FixtureDef;
+import com.badlogic.gdx.physics.box2d.Manifold;
 
 /**
  * @author Jerry Ashcroft
@@ -40,21 +49,25 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 
 	private static final int CAMERA_WIDTH = 720;
 	private static final int CAMERA_HEIGHT = 480;
+	
+	private static final int NUM_CREATURES = 5;
+	private static final float MAX_DISTANCE_EFFECTED = 4.5f, MOVE_FORCE = .4f;
 
 	// ===========================================================
 	// Fields
 	// ===========================================================
 
 	private BitmapTextureAtlas mBitmapTextureAtlas;
-
 	private TiledTextureRegion mCircleFaceTextureRegion;
 
 	private Scene mScene;
 
 	private PhysicsWorld mPhysicsWorld;
 	
-	private LinkedList creatureList;
-
+	private LinkedList<Creature> creatureList = new LinkedList<Creature>();
+	private Vector2 mGravity = new Vector2(0,0);
+	private ContactListener mContactListener;
+	
 	// ===========================================================
 	// Constructors
 	// ===========================================================
@@ -69,7 +82,7 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 
 	@Override
 	public EngineOptions onCreateEngineOptions() {
-		Toast.makeText(this, "Touch the screen to add objects.", Toast.LENGTH_LONG).show();
+		//Toast.makeText(this, "Touch the screen to add objects.", Toast.LENGTH_LONG).show();
 
 		final Camera camera = new Camera(0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
 
@@ -90,16 +103,61 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 		this.mEngine.registerUpdateHandler(new FPSLogger());
 
 		this.mScene = new Scene();
-		this.mScene.setBackground(new Background(0, 0, 0));
+		this.mScene.setBackground(new Background(0.09804f, 0.6274f, 0.8784f));
 		this.mScene.setOnSceneTouchListener(this);
+		this.mContactListener = new ContactListener(){
+			@Override
+			public void beginContact(Contact contact) {
+				Fixture creature;
+				Fixture fixA = contact.getFixtureA();
+				Fixture fixB = contact.getFixtureB();
+				if(fixA.getBody().getUserData() != "Creature" || fixB.getBody().getUserData() != "Creature"){
+					if(fixA.getBody().getUserData() == "Creature"){
+						creature = fixA;
+					}
+					else if(fixB.getBody().getUserData() == "Creature"){
+						creature = fixB;
+					}
+					else{
+						return;
+					}
+					creature.getBody().setLinearVelocity(0, 0);
+				}
+			}
+			@Override
+			public void endContact(Contact contact) {
 
-		this.mPhysicsWorld = new PhysicsWorld(new Vector2(0, SensorManager.GRAVITY_EARTH), false);
+			}
+			@Override
+			public void preSolve(Contact contact, Manifold oldManifold) {
+				Fixture fixA = contact.getFixtureA();
+				Fixture fixB = contact.getFixtureB();
+				if(fixA.getBody().getUserData() == "Creature" && fixB.getBody().getUserData() == "Creature"){
+					contact.setEnabled(false);
+				}
+			}
+			@Override
+			public void postSolve(Contact contact, ContactImpulse impulse) {
+				
+			}
+		};
+		this.mPhysicsWorld = new FixedStepPhysicsWorld(35,new Vector2(0, SensorManager.GRAVITY_EARTH), false, 3, 2){
+			@Override
+			public void onUpdate(float pSecondsElapsed){
+				super.onUpdate(pSecondsElapsed);
+				AndroidGame1Activity.this.onMoveUpdate(pSecondsElapsed);
+			}
+		};
 		
 		this.initFrame();
 		this.initCreatures();
+		this.initLevel();
 		
+		this.mPhysicsWorld.setGravity(mGravity);
+		this.mPhysicsWorld.setAutoClearForces(true);
+		this.mPhysicsWorld.setContactListener(mContactListener);
 		this.mScene.registerUpdateHandler(this.mPhysicsWorld);
-
+		this.mScene.setTouchAreaBindingOnActionDownEnabled(true);
 		return this.mScene;
 	}
 
@@ -107,7 +165,7 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	public boolean onSceneTouchEvent(final Scene pScene, final TouchEvent pSceneTouchEvent) {
 		if(this.mPhysicsWorld != null) {
 			if(pSceneTouchEvent.isActionDown()) {
-				
+				this.moveFromPoint(pSceneTouchEvent.getX()/PIXEL_TO_METER_RATIO_DEFAULT, pSceneTouchEvent.getY()/PIXEL_TO_METER_RATIO_DEFAULT);
 				return true;
 			}
 		}
@@ -137,13 +195,46 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	}
 
 	private void initCreatures(){
-		final Creature mCreature = new Creature(50, 50, this.mCircleFaceTextureRegion, this.mPhysicsWorld);
-		mCreature.animate(200);
-		creatureList.add(mCreature);
-		this.mScene.attachChild(mCreature);
-		
+		int startX = (CAMERA_WIDTH / 2) - (NUM_CREATURES*(this.mCircleFaceTextureRegion.getWidth()+10)/2);
+		int startY = (CAMERA_HEIGHT / 2) - (NUM_CREATURES*(this.mCircleFaceTextureRegion.getHeight()+10)/2);
+		for(int i = 0; i < NUM_CREATURES; i++){
+			Creature mCreature = new Creature(startX + i*(this.mCircleFaceTextureRegion.getWidth()+10), startY + i*(this.mCircleFaceTextureRegion.getHeight()+10), this.mCircleFaceTextureRegion, this.mPhysicsWorld);
+			this.creatureList.add(mCreature);
+			this.mScene.attachChild(mCreature);
+		}
 	}
 
+	private void initLevel(){
+		
+	}
+	
+	private void moveFromPoint(float pTouchMetersX, float pTouchMetersY){
+		final ListIterator<Creature> list = this.creatureList.listIterator();
+		final Vector2 touchLoc = Vector2Pool.obtain(pTouchMetersX, pTouchMetersY);
+		
+		Creature cur;
+		
+		while(list.hasNext()){
+			cur = list.next();
+			final Vector2 curLoc = Vector2Pool.obtain(cur.getBody().getPosition());
+			float distanceFromTouch = curLoc.dst(touchLoc);
+			if(distanceFromTouch < MAX_DISTANCE_EFFECTED){
+				final Vector2 velocity =  Vector2Pool.obtain(curLoc.sub(touchLoc).mul(MOVE_FORCE*(MAX_DISTANCE_EFFECTED - distanceFromTouch)));
+				cur.setMoveVector(velocity);
+				Vector2Pool.recycle(velocity); 
+			}
+			Vector2Pool.recycle(curLoc);
+		}
+		Vector2Pool.recycle(touchLoc);
+	}
+	
+	private void onMoveUpdate(float pSecondsElapsed){
+		final ListIterator<Creature> list = this.creatureList.listIterator();
+		
+		while(list.hasNext()){
+			list.next().makeNewMove();
+		}
+	}
 	// ===========================================================
 	// Inner and Anonymous Classes
 	// ===========================================================
