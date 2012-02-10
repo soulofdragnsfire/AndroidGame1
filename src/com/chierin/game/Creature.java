@@ -26,7 +26,7 @@ public class Creature extends AnimatedSprite {
 
 	private static final FixtureDef FIXTURE_DEF = PhysicsFactory.createFixtureDef(1, 0.5f, 0.5f);
 	private static final float CHANCE_OF_CHANGE = 0.8f, CHANCE_OF_STOP = 0.0f;
-	private static final int RANGE_OF_TURN = 15;
+	private static final int RANGE_OF_TURN = 12, ANGLE_OF_REBOUND = 60;
 	
 	// ===========================================================
 	// Fields
@@ -101,9 +101,9 @@ public class Creature extends AnimatedSprite {
 			this.setRotation(this.angleOfVector(this.mBody.getLinearVelocity()) - 90);
 		}
 		else if(this.mBody.getLinearVelocity().x == 0.0 && this.mBody.getLinearVelocity().y == 0.0){
-			float angle = -90;
+			float angle = (float) (ANGLE_OF_REBOUND * Math.PI/180);
 			if(Math.random() >= 0.5 ){
-				angle = 90;
+				angle = -angle;
 			}
 			
 			Vector2 vector = Vector2Pool.obtain((float) (this.moveVector.x*Math.cos(angle) - this.moveVector.y*Math.sin(angle)), 

@@ -51,7 +51,7 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	private static final int CAMERA_HEIGHT = 480;
 	
 	private static final int NUM_CREATURES = 5;
-	private static final float MAX_DISTANCE_EFFECTED = 4.5f, MOVE_FORCE = .4f;
+	private static final float MAX_DISTANCE_EFFECTED = 4f, MOVE_FORCE = 1.75f;
 
 	// ===========================================================
 	// Fields
@@ -66,7 +66,9 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	
 	private LinkedList<Creature> creatureList = new LinkedList<Creature>();
 	private Vector2 mGravity = new Vector2(0,0);
+	private Vector2 touchLoc = new Vector2(0,0);
 	private ContactListener mContactListener;
+	private boolean isTouched = false;
 	
 	// ===========================================================
 	// Constructors
@@ -165,7 +167,19 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	public boolean onSceneTouchEvent(final Scene pScene, final TouchEvent pSceneTouchEvent) {
 		if(this.mPhysicsWorld != null) {
 			if(pSceneTouchEvent.isActionDown()) {
-				this.moveFromPoint(pSceneTouchEvent.getX()/PIXEL_TO_METER_RATIO_DEFAULT, pSceneTouchEvent.getY()/PIXEL_TO_METER_RATIO_DEFAULT);
+				Vector2Pool.recycle(touchLoc);
+				this.touchLoc = Vector2Pool.obtain(pSceneTouchEvent.getX()/PIXEL_TO_METER_RATIO_DEFAULT, pSceneTouchEvent.getY()/PIXEL_TO_METER_RATIO_DEFAULT);
+				//this.moveFromPoint(pSceneTouchEvent.getX()/PIXEL_TO_METER_RATIO_DEFAULT, pSceneTouchEvent.getY()/PIXEL_TO_METER_RATIO_DEFAULT);
+				this.isTouched = true;
+				return true;
+			}
+			else if(pSceneTouchEvent.isActionMove()){
+				Vector2Pool.recycle(touchLoc);
+				this.touchLoc = Vector2Pool.obtain(pSceneTouchEvent.getX()/PIXEL_TO_METER_RATIO_DEFAULT, pSceneTouchEvent.getY()/PIXEL_TO_METER_RATIO_DEFAULT);
+				return true;
+			}
+			else if(pSceneTouchEvent.isActionUp()){
+				this.isTouched = false;
 				return true;
 			}
 		}
@@ -231,8 +245,22 @@ public class AndroidGame1Activity extends BaseClass implements IOnSceneTouchList
 	private void onMoveUpdate(float pSecondsElapsed){
 		final ListIterator<Creature> list = this.creatureList.listIterator();
 		
+		Creature cur;
+		
 		while(list.hasNext()){
-			list.next().makeNewMove();
+			cur = list.next();
+			if(this.isTouched){
+				final Vector2 curLoc = Vector2Pool.obtain(cur.getBody().getPosition());
+				float distanceFromTouch = curLoc.dst(this.touchLoc);
+				if(distanceFromTouch < MAX_DISTANCE_EFFECTED){
+					final Vector2 velocity =  Vector2Pool.obtain(curLoc.sub(touchLoc).nor().mul(MOVE_FORCE + MOVE_FORCE*(MAX_DISTANCE_EFFECTED - distanceFromTouch)/MAX_DISTANCE_EFFECTED));
+					//final Vector2 velocity =  Vector2Pool.obtain(curLoc.sub(this.touchLoc).nor().mul(MOVE_FORCE));
+					cur.setMoveVector(velocity);
+					Vector2Pool.recycle(velocity); 
+				}
+				Vector2Pool.recycle(curLoc);
+			}
+			cur.makeNewMove();
 		}
 	}
 	// ===========================================================
