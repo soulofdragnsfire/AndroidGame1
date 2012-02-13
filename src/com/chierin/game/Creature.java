@@ -66,6 +66,7 @@ public class Creature extends AnimatedSprite {
 		if(pVector != null){
 			Vector2Pool.recycle(this.moveVector);
 			this.moveVector = Vector2Pool.obtain(pVector);
+			this.mBody.setLinearVelocity(moveVector);
 			return true;
 		}
 		return false;
@@ -96,20 +97,12 @@ public class Creature extends AnimatedSprite {
 	// ===========================================================
 	
 	public void makeNewMove(){
+		if(this.mBody.getLinearVelocity().x != this.moveVector.x || this.mBody.getLinearVelocity().y != this.moveVector.y){
+			this.setMoveVector(this.mBody.getLinearVelocity());
+		}
 		
 		if(this.mBody.getLinearVelocity().x != 0.0 || this.mBody.getLinearVelocity().y != 0.0){
 			this.setRotation(this.angleOfVector(this.mBody.getLinearVelocity()) - 90);
-		}
-		else if(this.mBody.getLinearVelocity().x == 0.0 && this.mBody.getLinearVelocity().y == 0.0){
-			float angle = (float) (ANGLE_OF_REBOUND * Math.PI/180);
-			if(Math.random() >= 0.5 ){
-				angle = -angle;
-			}
-			
-			Vector2 vector = Vector2Pool.obtain((float) (this.moveVector.x*Math.cos(angle) - this.moveVector.y*Math.sin(angle)), 
-					(float) (this.moveVector.y*Math.cos(angle) + this.moveVector.x*Math.sin(angle)));
-			this.setMoveVector(vector);
-			Vector2Pool.recycle(vector);
 		}
 		else{
 			this.setRotation(0);
